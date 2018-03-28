@@ -1,0 +1,61 @@
+version: '3'
+volumes:
+  dados:
+networks:
+  rede_banco:
+  rede_web:
+  rede_fila:
+services:
+  service_db:
+    image: postgres:9.6
+    volumes:
+      # Volumes dos dados
+      - dados:/var/lib/postgresql/data
+      # Scripts
+      - ./scripts:/scripts
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - rede_banco
+  service_app:
+    image: python:3.6
+    volumes:
+      # Aplicação
+      - ./app:/app
+    working_dir: /app
+    command: bash ./app.sh
+    networks:
+      - rede_banco
+      - rede_web
+      - rede_fila
+    depends_on:
+      - service_db
+      - service_queue
+  service_front:
+    image: nginx:1.13
+    volumes: 
+      # Sites
+      - ./web:/usr/share/nginx/html
+      # Configuração do proxy reverso
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 8000:80
+    networks:
+      - rede_web
+    depends_on:
+      - service_app
+  service_queue:
+    image: redis:3.2
+    networks:
+      - rede_fila
+  service_worker:
+    build: worker
+    volumes:
+      # Worker
+      - ./worker:/worker
+    working_dir: /worker
+    command: worker.py
+    networks:
+      - rede_fila
+    depends_on:
+      - service_queue
+      - service_app
